@@ -10,6 +10,7 @@
 HINSTANCE hInst;                                // 現在のインターフェイス
 WCHAR szTitle[MAX_LOADSTRING];                  // タイトル バーのテキスト
 WCHAR szWindowClass[MAX_LOADSTRING];            // メイン ウィンドウ クラス名
+UINT dropped_file_count = 0;
 
 // このコード モジュールに含まれる関数の宣言を転送します:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -38,7 +39,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         return FALSE;
     }
 
-    //キーボードアクセラレータ
+    //キーボードアクセラレータ（ショートカット）
     HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_HEIF2JPG));
 
     MSG msg;
@@ -97,9 +98,11 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
    hInst = hInstance; // グローバル変数にインスタンス ハンドルを格納する
+   const int nWidth = 400;
+   const int nHeight = 320;
 
    HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
-      CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
+      CW_USEDEFAULT, 0, nWidth, nHeight, nullptr, nullptr, hInstance, nullptr);
 
    if (!hWnd)
    {
@@ -112,7 +115,6 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
    return TRUE;
 }
-
 //
 //  関数: WndProc(HWND, UINT, WPARAM, LPARAM)
 //
@@ -147,8 +149,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_PAINT:
         {
             PAINTSTRUCT ps;
+            TCHAR prompt[] = _T("ここにファイルをドロップ");
             HDC hdc = BeginPaint(hWnd, &ps);
-            // TODO: HDC を使用する描画コードをここに追加してください...
+            TCHAR message[255+1];
+            _stprintf_s(message, 255, _T("%d 件のファイル等がドロップされました"), dropped_file_count);
+
+            TextOutW(hdc, 10, 10, prompt, _tcslen(prompt));
+            if (dropped_file_count > 0) {
+                TextOutW(hdc, 10, 30, message, _tcslen(message));
+            }
             EndPaint(hWnd, &ps);
         }
         break;
@@ -160,18 +169,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             DragAcceptFiles(hWnd, FALSE);
             HDROP hdrop = (HDROP)wParam;
 
-            UINT dropped_file_count = DragQueryFileW(hdrop, 0xFFFFFFFF, NULL, 0);
+            dropped_file_count = DragQueryFileW(hdrop, 0xFFFFFFFF, NULL, 0);
+            
             for (unsigned int i = 0; i < dropped_file_count; i++) {
                 LPWSTR lpszFile = new TCHAR[1024 + 1];
                 DragQueryFileW(hdrop, i, lpszFile, 1024);
                 OutputDebugStringW(lpszFile);
                 OutputDebugStringW(_T("\n"));
-                //delete[] lpszFile; //デストラクタは自動で走るんじゃないかなあ
             }
 
             DragFinish(hdrop);
 
             DragAcceptFiles(hWnd, TRUE);
+            InvalidateRect(hWnd, NULL, TRUE); //再描画(WM_PAINT)を促す
         }
         break;
     default:
