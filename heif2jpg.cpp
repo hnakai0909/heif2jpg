@@ -156,6 +156,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         PostQuitMessage(0);
         break;
     case WM_DROPFILES:
+        {
+            DragAcceptFiles(hWnd, FALSE);
+            HDROP hdrop = (HDROP)wParam;
+
+            UINT dropped_file_count = DragQueryFileW(hdrop, 0xFFFFFFFF, NULL, 0);
+            for (unsigned int i = 0; i < dropped_file_count; i++) {
+                LPWSTR lpszFile = new TCHAR[1024 + 1];
+                DragQueryFileW(hdrop, i, lpszFile, 1024);
+                OutputDebugStringW(lpszFile);
+                OutputDebugStringW(_T("\n"));
+                //delete[] lpszFile; //デストラクタは自動で走るんじゃないかなあ
+            }
+
+            DragFinish(hdrop);
+
+            DragAcceptFiles(hWnd, TRUE);
+        }
         break;
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
