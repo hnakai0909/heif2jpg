@@ -17,3 +17,5 @@
 #include <libheif/heif.h>
 #include <turbojpeg.h>
 #include <shellapi.h>
+
+#include "encoder_jpeg.h"
