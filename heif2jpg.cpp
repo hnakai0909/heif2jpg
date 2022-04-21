@@ -1,6 +1,7 @@
 ﻿// heif2jpg.cpp : アプリケーションのエントリ ポイントを定義します。
 //
 
+#pragma warning(disable:26812) //enumにclassつけてねっていうやつ
 #include "framework.h"
 #include "heif2jpg.h"
 
@@ -115,6 +116,76 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
    return TRUE;
 }
+
+
+void WmPaint(HWND hWnd) {
+    PAINTSTRUCT ps;
+    TCHAR prompt[] = _T("ここにファイルをドロップ");
+    HDC hdc = BeginPaint(hWnd, &ps);
+    TCHAR message[255 + 1];
+    _stprintf_s(message, 255, _T("%d 件のファイル等がドロップされました"), dropped_file_count);
+
+    TextOutW(hdc, 10, 10, prompt, _tcslen(prompt));
+    if (dropped_file_count > 0) {
+        TextOutW(hdc, 10, 30, message, _tcslen(message));
+    }
+    EndPaint(hWnd, &ps);
+}
+
+void WmDropFiles(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    DragAcceptFiles(hWnd, FALSE);
+    HDROP hdrop = (HDROP)wParam;
+
+    dropped_file_count = DragQueryFileW(hdrop, 0xFFFFFFFF, NULL, 0);
+
+    for (unsigned int i = 0; i < dropped_file_count; i++) {
+        LPWSTR lpszFile = new TCHAR[1024 + 1];
+        DragQueryFileW(hdrop, i, lpszFile, 1024);
+
+        if (PathIsDirectory(lpszFile))
+        {
+            OutputDebugStringW(_T("フォルダやで\n"));
+        }
+        else if (wcscmp(PathFindExtensionW(lpszFile), _T(".heic")) == 0) {
+            FILE* fp;
+            OutputDebugStringW(_T(".heicやで\n"));
+
+            if (!_wfopen_s(&fp, lpszFile, _T("rb"))) {
+                if (fp != NULL) {
+                    uint8_t buf_magic[12];
+                    fread_s(buf_magic, 12, 1, 12, fp);
+                    enum heif_filetype_result filetype_check = heif_check_filetype(buf_magic, 12);
+                    if (filetype_check == heif_filetype_no) {
+                        OutputDebugStringW(_T("Input file is not an HEIF/AVIF file\n"));
+                        continue;
+                    }
+
+                    if (filetype_check == heif_filetype_yes_unsupported) {
+                        OutputDebugStringW(_T("Input file is an unsupported HEIF/AVIF file type\n"));
+                        continue;
+                    }
+
+                    //ここから先→
+                    //https://github.com/strukturag/libheif/blob/master/examples/heif_convert.cc#L220
+
+                    fclose(fp);
+                }
+            }
+        }
+        else
+        {
+            OutputDebugStringW(_T("よう知らんなあ\n"));
+        }
+        OutputDebugStringW(lpszFile);
+        OutputDebugStringW(_T("\n"));
+    }
+
+    DragFinish(hdrop);
+
+    DragAcceptFiles(hWnd, TRUE);
+    InvalidateRect(hWnd, NULL, TRUE); //再描画(WM_PAINT)を促す
+}
+
 //
 //  関数: WndProc(HWND, UINT, WPARAM, LPARAM)
 //
@@ -147,72 +218,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         break;
     case WM_PAINT:
-        {
-            PAINTSTRUCT ps;
-            TCHAR prompt[] = _T("ここにファイルをドロップ");
-            HDC hdc = BeginPaint(hWnd, &ps);
-            TCHAR message[255+1];
-            _stprintf_s(message, 255, _T("%d 件のファイル等がドロップされました"), dropped_file_count);
-
-            TextOutW(hdc, 10, 10, prompt, _tcslen(prompt));
-            if (dropped_file_count > 0) {
-                TextOutW(hdc, 10, 30, message, _tcslen(message));
-            }
-            EndPaint(hWnd, &ps);
-        }
+        WmPaint(hWnd);
         break;
     case WM_DESTROY:
         PostQuitMessage(0);
         break;
     case WM_DROPFILES:
-        {
-            DragAcceptFiles(hWnd, FALSE);
-            HDROP hdrop = (HDROP)wParam;
-
-            dropped_file_count = DragQueryFileW(hdrop, 0xFFFFFFFF, NULL, 0);
-            
-            for (unsigned int i = 0; i < dropped_file_count; i++) {
-                LPWSTR lpszFile = new TCHAR[1024 + 1];
-                DragQueryFileW(hdrop, i, lpszFile, 1024);
-                
-                if (PathIsDirectory(lpszFile))
-                {
-                    OutputDebugStringW(_T("フォルダやで\n"));
-                }else if (wcscmp(PathFindExtensionW(lpszFile), _T(".heic")) == 0) {
-                    FILE* fp;
-                    OutputDebugStringW(_T(".heicやで\n"));
-
-                    if (!_wfopen_s(&fp, lpszFile, _T("rb"))) {
-                        if (fp != NULL) {
-                            uint8_t buf_magic[12];
-                            fread_s(buf_magic, 12, 1, 12, fp);
-                            enum heif_filetype_result filetype_check = heif_check_filetype(buf_magic, 12);
-                            if (filetype_check == heif_filetype_no) {
-                                OutputDebugStringW(_T("Input file is not an HEIF/AVIF file\n"));
-                                return 1;
-                            }
-
-                            if (filetype_check == heif_filetype_yes_unsupported) {
-                                OutputDebugStringW(_T("Input file is an unsupported HEIF/AVIF file type\n"));
-                                return 1;
-                            }
-                            fclose(fp);
-                        }
-                    }
-                }
-                else
-                {
-                    OutputDebugStringW(_T("よう知らんなあ\n"));
-                }
-                OutputDebugStringW(lpszFile);
-                OutputDebugStringW(_T("\n"));
-            }
-
-            DragFinish(hdrop);
-
-            DragAcceptFiles(hWnd, TRUE);
-            InvalidateRect(hWnd, NULL, TRUE); //再描画(WM_PAINT)を促す
-        }
+        WmDropFiles(hWnd, message, wParam, lParam);
         break;
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
