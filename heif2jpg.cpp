@@ -174,6 +174,36 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             for (unsigned int i = 0; i < dropped_file_count; i++) {
                 LPWSTR lpszFile = new TCHAR[1024 + 1];
                 DragQueryFileW(hdrop, i, lpszFile, 1024);
+                
+                if (PathIsDirectory(lpszFile))
+                {
+                    OutputDebugStringW(_T("フォルダやで\n"));
+                }else if (wcscmp(PathFindExtensionW(lpszFile), _T(".heic")) == 0) {
+                    FILE* fp;
+                    OutputDebugStringW(_T(".heicやで\n"));
+
+                    if (!_wfopen_s(&fp, lpszFile, _T("rb"))) {
+                        if (fp != NULL) {
+                            uint8_t buf_magic[12];
+                            fread_s(buf_magic, 12, 1, 12, fp);
+                            enum heif_filetype_result filetype_check = heif_check_filetype(buf_magic, 12);
+                            if (filetype_check == heif_filetype_no) {
+                                OutputDebugStringW(_T("Input file is not an HEIF/AVIF file\n"));
+                                return 1;
+                            }
+
+                            if (filetype_check == heif_filetype_yes_unsupported) {
+                                OutputDebugStringW(_T("Input file is an unsupported HEIF/AVIF file type\n"));
+                                return 1;
+                            }
+                            fclose(fp);
+                        }
+                    }
+                }
+                else
+                {
+                    OutputDebugStringW(_T("よう知らんなあ\n"));
+                }
                 OutputDebugStringW(lpszFile);
                 OutputDebugStringW(_T("\n"));
             }
