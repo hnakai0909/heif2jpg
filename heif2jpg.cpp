@@ -13,6 +13,21 @@ WCHAR szTitle[MAX_LOADSTRING];                  // タイトル バーのテキ�
 WCHAR szWindowClass[MAX_LOADSTRING];            // メイン ウィンドウ クラス名
 UINT dropped_file_count = 0;
 
+class ContextReleaser
+{
+public:
+    ContextReleaser(struct heif_context* ctx) : ctx_(ctx)
+    {}
+
+    ~ContextReleaser()
+    {
+        heif_context_free(ctx_);
+    }
+
+private:
+    struct heif_context* ctx_;
+};
+
 // このコード モジュールに含まれる関数の宣言を転送します:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
@@ -150,27 +165,62 @@ void WmDropFiles(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
             FILE* fp;
             OutputDebugStringW(_T(".heicやで\n"));
 
-            if (!_wfopen_s(&fp, lpszFile, _T("rb"))) {
-                if (fp != NULL) {
-                    uint8_t buf_magic[12];
-                    fread_s(buf_magic, 12, 1, 12, fp);
-                    enum heif_filetype_result filetype_check = heif_check_filetype(buf_magic, 12);
-                    if (filetype_check == heif_filetype_no) {
-                        OutputDebugStringW(_T("Input file is not an HEIF/AVIF file\n"));
-                        continue;
-                    }
-
-                    if (filetype_check == heif_filetype_yes_unsupported) {
-                        OutputDebugStringW(_T("Input file is an unsupported HEIF/AVIF file type\n"));
-                        continue;
-                    }
-
-                    //ここから先→
-                    //https://github.com/strukturag/libheif/blob/master/examples/heif_convert.cc#L220
-
-                    fclose(fp);
-                }
+            if (_wfopen_s(&fp, lpszFile, _T("rb"))) {
+                continue;
             }
+            if (fp == NULL) {
+                continue;
+            }
+            uint8_t buf_magic[12];
+            fread_s(buf_magic, 12, 1, 12, fp);
+            enum heif_filetype_result filetype_check = heif_check_filetype(buf_magic, 12);
+            if (filetype_check == heif_filetype_no) {
+                OutputDebugStringW(_T("Input file is not an HEIF/AVIF file\n"));
+                continue;
+            }
+
+            if (filetype_check == heif_filetype_yes_unsupported) {
+                OutputDebugStringW(_T("Input file is an unsupported HEIF/AVIF file type\n"));
+                continue;
+            }
+
+            //ここから先→
+            //https://github.com/strukturag/libheif/blob/master/examples/heif_convert.cc#L220
+
+  // --- read the HEIF file
+
+            struct heif_context* ctx = heif_context_alloc();
+            if (!ctx) {
+                fprintf(stderr, "Could not create context object\n");
+                continue;
+            }
+
+            ContextReleaser cr(ctx);
+            struct heif_error err;
+            /*
+            err = heif_context_read_from_file(ctx, lpszFile.c_str(), nullptr);
+            if (err.code != 0) {
+                std::cerr << "Could not read HEIF/AVIF file: " << err.message << "\n";
+               continue;
+            }
+
+            int num_images = heif_context_get_number_of_top_level_images(ctx);
+            if (num_images == 0) {
+                OutputDebugStringW(_T("File doesn't contain any images\n"));
+                continue;
+            }
+
+            if (TRUE) {
+                OutputDebugStringW(_T("File contains "));
+                    << num_images << " image" << (num_images > 1 ? "s" : "") << "\n";
+            }
+
+            std::vector<heif_item_id> image_IDs(num_images);
+            num_images = heif_context_get_list_of_top_level_image_IDs(ctx, image_IDs.data(), num_images);
+            */
+
+
+            fclose(fp);
         }
         else
         {

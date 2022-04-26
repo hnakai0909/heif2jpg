@@ -20,4 +20,6 @@
 #include <shlwapi.h>
 #pragma comment(lib, "Shlwapi.lib")
 
+#include <vector>
+
 #include "encoder_jpeg.h"
