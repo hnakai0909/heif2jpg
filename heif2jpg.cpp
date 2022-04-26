@@ -154,18 +154,28 @@ void WmDropFiles(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     dropped_file_count = DragQueryFileW(hdrop, 0xFFFFFFFF, NULL, 0);
 
     for (unsigned int i = 0; i < dropped_file_count; i++) {
-        LPWSTR lpszFile = new TCHAR[1024 + 1];
-        DragQueryFileW(hdrop, i, lpszFile, 1024);
+        LPWSTR lpszInFile = new TCHAR[1024 + 1];
+        DragQueryFileW(hdrop, i, lpszInFile, 1024);
 
-        if (PathIsDirectory(lpszFile))
+        if (PathIsDirectory(lpszInFile))
         {
             OutputDebugStringW(_T("フォルダやで\n"));
         }
-        else if (wcscmp(PathFindExtensionW(lpszFile), _T(".heic")) == 0) {
+        else if (wcscmp(PathFindExtensionW(lpszInFile), _T(".heic")) == 0) {
+            bool option_quiet = false;
             FILE* fp;
+            unsigned quality = 90;
+            std::unique_ptr<Encoder> encoder;
+            encoder.reset(new JpegEncoder(quality));
+
             OutputDebugStringW(_T(".heicやで\n"));
 
-            if (_wfopen_s(&fp, lpszFile, _T("rb"))) {
+            //出力ファイル名を生成
+            LPWSTR lpszOutFile = new TCHAR[1024 + 1];
+            wcscpy_s(lpszOutFile, 1024, lpszInFile);
+            PathRenameExtensionW(lpszOutFile, _T(".jpg"));
+
+            if (_wfopen_s(&fp, lpszInFile, _T("rb"))) {
                 continue;
             }
             if (fp == NULL) {
@@ -184,24 +194,41 @@ void WmDropFiles(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
                 continue;
             }
 
-            //ここから先→
-            //https://github.com/strukturag/libheif/blob/master/examples/heif_convert.cc#L220
-
-  // --- read the HEIF file
-
             struct heif_context* ctx = heif_context_alloc();
             if (!ctx) {
-                fprintf(stderr, "Could not create context object\n");
+                OutputDebugStringW(_T("Could not create context object\n"));
                 continue;
             }
 
             ContextReleaser cr(ctx);
             struct heif_error err;
-            /*
-            err = heif_context_read_from_file(ctx, lpszFile.c_str(), nullptr);
+
+            HANDLE hFile = CreateFileW(lpszInFile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (hFile == INVALID_HANDLE_VALUE) {
+                OutputDebugStringW(_T("CreateFileW (open) Failed\n"));
+                continue;
+            }
+
+            LARGE_INTEGER fileSize;
+            if (!GetFileSizeEx(hFile, &fileSize)) {
+                OutputDebugStringW(_T("GetFileSizeEx Failed\n"));
+                continue;
+            }
+
+            LPVOID HEIFBuffer = malloc(fileSize.QuadPart);
+            if (HEIFBuffer == NULL) {
+                OutputDebugStringW(_T("malloc Failed\n"));
+            }
+
+            if (!ReadFile(hFile, HEIFBuffer, fileSize.QuadPart, NULL, NULL)) {
+                OutputDebugStringW(_T("ReadFile Failed\n"));
+                continue;
+            };
+            
+            err = heif_context_read_from_memory_without_copy(ctx, HEIFBuffer, fileSize.QuadPart, nullptr);
             if (err.code != 0) {
-                std::cerr << "Could not read HEIF/AVIF file: " << err.message << "\n";
-               continue;
+                OutputDebugF(_T("Could not read HEIF/AVIF file: %s\n"), (LPCWSTR)err.message);
+                continue;
             }
 
             int num_images = heif_context_get_number_of_top_level_images(ctx);
@@ -209,24 +236,96 @@ void WmDropFiles(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
                 OutputDebugStringW(_T("File doesn't contain any images\n"));
                 continue;
             }
+            else if (num_images > 1) {
+                OutputDebugStringW(_T("簡易実装のため、1ファイルに複数イメージが含まれている場合は未対応です★\n"));
+                continue;
+            }
 
-            if (TRUE) {
-                OutputDebugStringW(_T("File contains "));
-                    << num_images << " image" << (num_images > 1 ? "s" : "") << "\n";
+            if (!option_quiet) {
+                OutputDebugF(_T("File contains %d image(s)\n"), num_images);
             }
 
             std::vector<heif_item_id> image_IDs(num_images);
             num_images = heif_context_get_list_of_top_level_image_IDs(ctx, image_IDs.data(), num_images);
+
+            unsigned idx = 0;
+            struct heif_image_handle* handle;
+            err = heif_context_get_image_handle(ctx, image_IDs[idx], &handle);
+            if (err.code) {
+                OutputDebugF(_T("Could not read HEIF/AVIF image : %s\n"), err.message);
+                continue;
+            }
+
+            int has_alpha = heif_image_handle_has_alpha_channel(handle);
+            struct heif_decoding_options* decode_options = heif_decoding_options_alloc();
+            encoder->UpdateDecodingOptions(handle, decode_options);
+
+            //decode_options->strict_decoding = strict_decoding;
+
+            int bit_depth = heif_image_handle_get_luma_bits_per_pixel(handle);
+            if (bit_depth < 0) {
+                heif_decoding_options_free(decode_options);
+                heif_image_handle_release(handle);
+                OutputDebugF(_T("Input image has undefined bit-depth\n"));
+                continue;
+            }
+
+            struct heif_image* image;
+            err = heif_decode_image(handle,
+                &image,
+                encoder->colorspace(has_alpha),
+                encoder->chroma(has_alpha, bit_depth),
+                decode_options);
+            heif_decoding_options_free(decode_options);
+            if (err.code) {
+                heif_image_handle_release(handle);
+                OutputDebugF(_T("Could not decode image: %s\n"), err.message);
+                continue;
+            }
+
+            // show decoding warnings
+            //vcpkg収録のバージョン2 ?では未実装？
+            /*
+            for (int i = 0;; i++) {
+                int n = heif_image_get_decoding_warnings(image, i, &err, 1);
+                if (n == 0) {
+                    break;
+                }
+
+                OutputDebugF(_T("Warning: %s\n"), err.message);
+            }
             */
 
+            //TODO: warning（主にデバッグメッセージ表示まわり）を取り除く
+            //TODO: jpeg Encoder ワイド文字対応
+            //TODO: jpeg EXIF Orientation(向き情報) 1にセット
 
+            if (image) {
+                std::string filename = "F:\\tmpfolder\\a.jpg"; //ワイド文字非対応のため仮のファイル名
+                bool written = encoder->Encode(handle, image, filename);
+                if (!written) {
+                    fprintf(stderr, "could not write image\n");
+                }
+                else {
+                    if (!option_quiet) {
+                        OutputDebugF(_T("Written to "));
+                        OutputDebugF(_T("%s"), filename.c_str()); //TODO: ←は不正　直す
+                        OutputDebugF(_T("\n"));
+                    }
+                }
+                heif_image_release(image);
+                heif_image_handle_release(handle);
+            }
+
+            
+            free(HEIFBuffer);
             fclose(fp);
         }
         else
         {
             OutputDebugStringW(_T("よう知らんなあ\n"));
         }
-        OutputDebugStringW(lpszFile);
+        OutputDebugStringW(lpszInFile);
         OutputDebugStringW(_T("\n"));
     }
 

@@ -14,12 +14,18 @@
 #include <memory.h>
 #include <tchar.h>
 
-#include <libheif/heif.h>
-#include <turbojpeg.h>
+//Windows API
 #include <shellapi.h>
 #include <shlwapi.h>
 #pragma comment(lib, "Shlwapi.lib")
+#include <fileapi.h>
 
+//外部ライブラリ
+#include <libheif/heif.h>
+#include <turbojpeg.h>
+
+//C++標準ライブラリ
 #include <vector>
+
 
 #include "encoder_jpeg.h"
