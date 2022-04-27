@@ -133,14 +133,14 @@ void jpeg_write_icc_profile(j_compress_ptr cinfo, const JOCTET* icc_data_ptr,
 #endif  // !defined(HAVE_JPEG_WRITE_ICC_PROFILE)
 
 bool JpegEncoder::Encode(const struct heif_image_handle* handle,
-                         const struct heif_image* image, const std::string& filename)
+                         const struct heif_image* image, const LPWSTR filename)
 {
   FILE* fp;
-  fopen_s(&fp, filename.c_str(), "wb");
+  _wfopen_s(&fp, filename, L"wb");
   if (!fp) {
       char errstr[256];
       strerror_s(errstr, (size_t)255, errno);
-    fprintf(stderr, "Can't open %s: %s\n", filename.c_str(), errstr);
+    fprintf(stderr, "Can't open %s: %s\n", filename, errstr);
     return false;
   }
 

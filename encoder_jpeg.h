@@ -34,6 +34,8 @@
 
 #include <string>
 
+#include <Windows.h>
+
 #include "encoder.h"
 
 class JpegEncoder : public Encoder
@@ -55,7 +57,7 @@ public:
                              struct heif_decoding_options* options) const override;
 
   bool Encode(const struct heif_image_handle* handle,
-              const struct heif_image* image, const std::string& filename) override;
+              const struct heif_image* image, const LPWSTR filename) override;
 
 private:
   static const int kDefaultQuality = 90;
