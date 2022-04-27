@@ -297,17 +297,19 @@ void WmDropFiles(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
             */
 
             //TODO: warning（主にデバッグメッセージ表示まわり）を取り除く
+            //TODO: jpeg Encoder ワイド文字対応
             //TODO: jpeg EXIF Orientation(向き情報) 1にセット
 
             if (image) {
-                bool written = encoder->Encode(handle, image, lpszOutFile);
+                std::string filename = "F:\\tmpfolder\\a.jpg"; //ワイド文字非対応のため仮のファイル名
+                bool written = encoder->Encode(handle, image, filename);
                 if (!written) {
                     fprintf(stderr, "could not write image\n");
                 }
                 else {
                     if (!option_quiet) {
                         OutputDebugF(_T("Written to "));
-                        OutputDebugStringW(lpszOutFile);
+                        OutputDebugF(_T("%s"), filename.c_str()); //TODO: ←は不正　直す
                         OutputDebugF(_T("\n"));
                     }
                 }

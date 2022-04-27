@@ -29,8 +29,6 @@
 #include <string>
 #include <memory>
 
-#include <Windows.h>
-
 #include <libheif/heif.h>
 
 class Encoder
@@ -49,7 +47,7 @@ public:
   }
 
   virtual bool Encode(const struct heif_image_handle* handle,
-                      const struct heif_image* image, const LPWSTR filename) = 0;
+                      const struct heif_image* image, const std::string& filename) = 0;
 
 protected:
   static bool HasExifMetaData(const struct heif_image_handle* handle);
