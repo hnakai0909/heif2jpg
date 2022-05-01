@@ -1,6 +1,6 @@
 # heif2jpg
 
-heif2jpgは、libheifおよびlibjpeg-turboを利用した、ドラッグアンドドロップWindowsアプリケーションです。
+heif2jpgは、libheifおよびlibjpeg-turboを利用した、HEIF形式のファイル（現時点で拡張子 `.heic` のみ対応）をドラッグアンドドロップすると`.jpg`に変換するWindowsアプリケーションです。
 
 - 開発言語：C++
   - ただし、Windows API はC言語インターフェースを中心に利用している
