@@ -185,20 +185,18 @@ void WmPaint(HWND hWnd) {
 }
 
 bool IncrementConvertedFileCount(void){
-    int retval = true;
+    int retval = false;
     __try {
         printf("Thread %d add ghMutexConvertedFileCount...\n", GetCurrentThreadId());
         converted_file_count++;
         retval = true;
     }
-
     __finally {
         // Release ownership of the mutex object
         if (!ReleaseMutex(ghMutexConvertedFileCount))
         {
             // Handle error.
         }
-        retval = false;
     }
     return retval;
 }
@@ -403,6 +401,7 @@ unsigned __stdcall ThreadConvert(void* lpParam){
     OutputDebugStringW(lpszInFile);
     OutputDebugStringW(_T("\n"));
 
+    HeapFree(GetProcessHeap(), 0, lpParam);
     _endthreadex(0);
     return 0;
 }
@@ -447,18 +446,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_DROPFILES:
         {
             HDROP hdrop = (HDROP)wParam;
-            ThreadConvertArgs_t ThreadConvertParam[THREADCOUNT];
+
 
             dropped_file_count = DragQueryFileW(hdrop, 0xFFFFFFFF, NULL, 0);
             //TODO: スレッド数の制限（たぶんセマフォでできる）
             //TODO: 未処理があるにもかかわらずドロップされたときの対応
             for (unsigned int i = 0; i < dropped_file_count; i++) {
+                PThreadConvertArgs_t PThreadConvertParam = (PThreadConvertArgs_t)HeapAlloc(
+                    GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(ThreadConvertArgs_t));
+                if (PThreadConvertParam == NULL) {
+                    return 1;
+                }
                 LPWSTR lpszInFile = new TCHAR[1024 + 1];
                 DragQueryFileW(hdrop, i, lpszInFile, 1024);
                 
-                ThreadConvertParam[i].hWnd = hWnd;
-                ThreadConvertParam[i].lpszInFile = _wcsdup(lpszInFile);
-                aThread[i] = (HANDLE)_beginthreadex(NULL, 0, ThreadConvert, (void*)&(ThreadConvertParam[i]), 0, NULL);
+                PThreadConvertParam->hWnd = hWnd;
+                PThreadConvertParam->lpszInFile = _wcsdup(lpszInFile);
+                aThread[i] = (HANDLE)_beginthreadex(NULL, 0, ThreadConvert, (void*)PThreadConvertParam, 0, NULL);
                 if (!aThread[i]) {
                     printf("_beginthreadex() error: %d\n", GetLastError());
                     return 1;
